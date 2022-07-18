@@ -107,7 +107,9 @@ proc parseValue(arg: Arg, option: Option): JsonNode =
 proc doArray(args: Args, option: Option, jnode = newJArray()): JsonNode =
   result = jnode
   for arg in args:
-    result.add(parseValue(arg, option))
+    let value = parseValue(arg, option)
+    if not (option.dontCreateNullElement and value.kind == JNull):
+      result.add(parseValue(arg, option))
 
 proc doObject(args: Args, option: Option, jnode = newJObject()): JsonNode =
   result = jnode
@@ -128,10 +130,11 @@ proc doObject(args: Args, option: Option, jnode = newJObject()): JsonNode =
         var obj = result
         for i in 0..keys.len-2:
           let key = keys[i]
-          if not obj.hasKey(key) or obj[key].kind != JObject:
+          if not (obj.hasKey(key) and obj[key].kind == JObject):
             obj[key] = newJObject()
           obj = obj[key]
-        obj[keys[^1]] = value
+        if not (option.dontCreateNullElement and value.kind == JNull):
+          obj[keys[^1]] = value
         continue
 
       let
@@ -143,41 +146,40 @@ proc doObject(args: Args, option: Option, jnode = newJObject()): JsonNode =
         let
           key = kv[0][0..arrayIndex-1]
           value = Arg(value: kv[1], coercion: arg.coercion).parseValue(option)
-        if result.hasKey(key) and result[key].kind == JArray:
+        if not (result.hasKey(key) and result[key].kind == JArray):
+          result[key] = newJArray()
+        if not (option.dontCreateNullElement and value.kind == JNull):
           result[key].add(value)
-        else:
-          var newarr = newJArray()
-          newarr.add(value)
-          result.add(key, newarr)
       elif objectIndex[0] >= 0 and objectIndex[1] >= 0:
         let
           key = kv[0][0..objectIndex[0]-1]
           childKey = kv[0][objectIndex[0]+1..objectIndex[1]-1]
           value = Arg(value: kv[1], coercion: arg.coercion).parseValue(option)
-        if result.hasKey(key) and result[key].kind == JObject:
+        if not (result.hasKey(key) and result[key].kind == JObject):
+          result[key] = newJObject()
+        if not (option.dontCreateNullElement and value.kind == JNull):
           result[key].add(childKey, value)
-        else:
-          var newObj = newJObject()
-          newObj.add(childKey, value)
-          result.add(key, newObj)
       else:
-        let newArg = Arg(value: kv[1], coercion: arg.coercion)
-        result.add(kv[0], parseValue(newArg, option))
+        let value = Arg(value: kv[1], coercion: arg.coercion).parseValue(option)
+        if not (option.dontCreateNullElement and value.kind == JNull):
+          result.add(kv[0], value)
     elif arg.value.find("@") >= 0:
       # jo treats key@value specifically as boolean JSON elements: if the value begins with T, t, or the numeric value is greater than zero, the result is true, else false.
       let kv = arg.value.split("@", 2)
-      var value: bool
-      if kv[1].startsWith("t") or kv[1].startsWith("T"):
-        value = true
+      var value: JsonNode
+      if kv[1] == "":
+        value = newJNull()
+      elif kv[1].startsWith("t") or kv[1].startsWith("T"):
+        value = newJBool(true)
       else:
         try:
           let num = kv[1].parseFloat
-          value = num > 0
+          value = newJBool(num > 0)
         except ValueError:
-          value = false
-      result.add(kv[0], newJBool(value))
+          value = newJBool(false)
+      result.add(kv[0], value)
     else:
-      raiseAssert("each word must be `key=value` or `key@value`")
+      echo "Argument `" & arg.value & "` is neither k=v nor k@v"
 
 proc doFile(file: File, args: Args, option: Option): JsonNode =
   try:
