@@ -5,13 +5,10 @@ This is inspired by [jpmens/jo](https://github.com/jpmens/jo).
 
 # How to install
 
-You can get binary as following.
-Need to install nimble.
+You can install via nimble.
 
 ```sh
-git clone https://github.com/uga-rosa/njo.git
-cd njo
-nimble build
+nimble install njo
 ```
 
 # Difference from original jo
