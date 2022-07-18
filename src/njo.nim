@@ -2,7 +2,7 @@ import strutils, base64, json, parser, sequtils
 
 const VERSION = "1.0"
 
-proc doVersion(option: Option): string =
+proc getVersion(option: Option): string =
   if option.showVersion:
     return VERSION
   elif option.showVersionJson:
@@ -19,8 +19,8 @@ proc doVersion(option: Option): string =
   else:
     return ""
 
-proc doHelp() =
-  echo """Usage: njo [-a] [-B] [-d keydelim] [-p] [-e] [-n] [-v] [-V] [-f file] [--] [-s|-n|-b] [word...]
+proc getHelpDocument(): string =
+  return """Usage: njo [-a] [-B] [-d keydelim] [-p] [-e] [-n] [-v] [-V] [-f file] [--] [-s|-n|-b] [word...]
       word is key=value or key@value
       -a creates an array of words
       -B disable boolean true/false/null detection
@@ -34,7 +34,10 @@ proc doHelp() =
       -v show version
       -V show version in JSON"""
 
-proc parseValueDefault(s: string, option: Option): JsonNode =
+proc presuf(s, pre, suf: string): bool =
+  s.startsWith(pre) and s.endsWith(suf)
+
+proc parseValueDefault*(s: string, option: Option): JsonNode =
   if s == "":
     return newJNull()
 
@@ -60,7 +63,7 @@ proc parseValueDefault(s: string, option: Option): JsonNode =
     elif s == "null":
       return newJNull()
 
-  if s.startsWith("{") or s.startsWith("["):
+  if s.presuf("{", "}") or s.presuf("[", "]") or s.presuf("\"", "\""):
     return s.parseJson
 
   try:
@@ -74,10 +77,10 @@ proc parseValueDefault(s: string, option: Option): JsonNode =
 
   return newJString(s)
 
-proc parseValueString(s: string): JsonNode =
+proc parseValueString*(s: string): JsonNode =
   return s.newJString()
 
-proc parseValueNumber(s: string): JsonNode =
+proc parseValueNumber*(s: string): JsonNode =
   try:
     return s.parseInt.newJInt
   except ValueError:
@@ -88,7 +91,7 @@ proc parseValueNumber(s: string): JsonNode =
     discard
   return s.len.newJInt
 
-proc parseValueBool(s: string, option: Option): JsonNode =
+proc parseValueBool*(s: string, option: Option): JsonNode =
   if not option.disableParseBoolString:
     case s
     of "true": return newJBool(true)
@@ -96,7 +99,7 @@ proc parseValueBool(s: string, option: Option): JsonNode =
     else: discard
   return newJBool(s != "")
 
-proc parseValue(arg: Arg, option: Option): JsonNode =
+proc parseValue*(arg: Arg, option: Option): JsonNode =
   let s = arg.value
   case arg.coercion
   of Default: return parseValueDefault(s, option)
@@ -104,14 +107,14 @@ proc parseValue(arg: Arg, option: Option): JsonNode =
   of Number: return parseValueNumber(s)
   of Bool: return parseValueBool(s, option)
     
-proc doArray(args: Args, option: Option, jnode = newJArray()): JsonNode =
+proc doArray*(args: Args, option: Option, jnode = newJArray()): JsonNode =
   result = jnode
   for arg in args:
     let value = parseValue(arg, option)
     if not (option.dontCreateNullElement and value.kind == JNull):
       result.add(parseValue(arg, option))
 
-proc doObject(args: Args, option: Option, jnode = newJObject()): JsonNode =
+proc doObject*(args: Args, option: Option, jnode = newJObject()): JsonNode =
   result = jnode
   for arg in args:
     if arg.value.find("=") >= 0:
@@ -181,7 +184,7 @@ proc doObject(args: Args, option: Option, jnode = newJObject()): JsonNode =
     else:
       echo "Argument `" & arg.value & "` is neither k=v nor k@v"
 
-proc doFile(file: File, args: Args, option: Option): JsonNode =
+proc doFile*(file: File, args: Args, option: Option): JsonNode =
   try:
     let contentFile = file.readAll.parseJson
     case contentFile.kind
@@ -189,24 +192,22 @@ proc doFile(file: File, args: Args, option: Option): JsonNode =
     of JArray: return doArray(args, option, contentFile)
     else:
       echo "Input JSON not an array or object: " & $contentFile
-      doHelp()
+      echo getHelpDocument()
   except IOError:
     echo "Cannot open " & option.file & " for reading"
-    doHelp()
+    echo getHelpDocument()
   except JsonParsingError:
     echo "Cannot parse to json format"
-    doHelp()
+    echo getHelpDocument()
 
-proc run() =
+proc run*() =
   let (option, args) = parse()
 
   if option.help:
-    doHelp()
-    return
+    echo getHelpDocument()
 
   if option.showVersion or option.showVersionJson:
-    echo doVersion(option)
-    return
+    echo getVersion(option)
 
   var jnode: JsonNode
   if option.file != "":

@@ -22,8 +22,7 @@ type
     Bool
     Default
 
-proc parse*(): (Option, Args) =
-  let cmdArgs = os.commandLineParams()
+proc parse*(cmdArgs = os.commandLineParams()): (Option, Args) =
   # `njo -ap 1 2` => ["-ap", "1", "2"]
   var
     option: Option
