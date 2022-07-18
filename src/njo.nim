@@ -48,9 +48,11 @@ proc parseValueDefault*(s: string, option: Option): JsonNode =
 
   if fileValue > 0:
     let fname = s[1 .. ^1]
-    let content = fname.readFile
+    var content = fname.readFile
     case fileValue
-    of 1: return content.newJString
+    of 1:
+      content.removeSuffix
+      return content.newJString
     of 2: return content.encode.newJString
     of 3: return content.parseJson
     else: discard
