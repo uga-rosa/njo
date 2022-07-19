@@ -1,8 +1,8 @@
-import strutils, base64, json, parser, sequtils
+import parser, nre, strutils, base64, json, sequtils
 
 const VERSION = "1.0"
 
-proc getVersion(option: Option): string =
+proc getVersion(option: parser.Option): string =
   if option.showVersion:
     return VERSION
   elif option.showVersionJson:
@@ -37,7 +37,7 @@ proc getHelpDocument(): string =
 proc presuf(s, pre, suf: string): bool =
   s.startsWith(pre) and s.endsWith(suf)
 
-proc parseValueDefault*(s: string, option: Option): JsonNode =
+proc parseValueDefault*(s: string, option: parser.Option): JsonNode =
   if s == "":
     return newJNull()
 
@@ -93,7 +93,7 @@ proc parseValueNumber*(s: string): JsonNode =
     discard
   return s.len.newJInt
 
-proc parseValueBool*(s: string, option: Option): JsonNode =
+proc parseValueBool*(s: string, option: parser.Option): JsonNode =
   if not option.disableParseBoolString:
     case s
     of "true": return newJBool(true)
@@ -101,22 +101,27 @@ proc parseValueBool*(s: string, option: Option): JsonNode =
     else: discard
   return newJBool(s != "")
 
-proc parseValue*(arg: Arg, option: Option): JsonNode =
-  let s = arg.value
+proc escape(s: string): string =
+  s.replace(re"\\+", proc (s: string): string =
+    s[1..^1]
+  )
+
+proc parseValue*(arg: Arg, option: parser.Option): JsonNode =
+  let s = arg.value.escape
   case arg.coercion
   of Default: return parseValueDefault(s, option)
   of String: return parseValueString(s)
   of Number: return parseValueNumber(s)
   of Bool: return parseValueBool(s, option)
     
-proc doArray*(args: Args, option: Option, jnode = newJArray()): JsonNode =
+proc doArray*(args: Args, option: parser.Option, jnode = newJArray()): JsonNode =
   result = jnode
   for arg in args:
     let value = parseValue(arg, option)
     if not (option.dontCreateNullElement and value.kind == JNull):
       result.add(parseValue(arg, option))
 
-proc doObject*(args: Args, option: Option, jnode = newJObject()): JsonNode =
+proc doObject*(args: Args, option: parser.Option, jnode = newJObject()): JsonNode =
   result = jnode
   for arg in args:
     if arg.value.find("=") >= 0:
@@ -186,7 +191,7 @@ proc doObject*(args: Args, option: Option, jnode = newJObject()): JsonNode =
     else:
       echo "Argument `" & arg.value & "` is neither k=v nor k@v"
 
-proc doFile*(file: File, args: Args, option: Option): JsonNode =
+proc doFile*(file: File, args: Args, option: parser.Option): JsonNode =
   try:
     let contentFile = file.readAll.parseJson
     case contentFile.kind
